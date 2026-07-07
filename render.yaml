@@ -13,8 +13,8 @@ services:
       - key: CHANNEL_ID
         value: "@proLuding"
       - key: DB_PATH
-        value: "/data/vivino_bot.db"
+        value: "./data/vivino_bot.db"
       - key: SCREENSHOTS_DIR
-        value: "/data/screenshots"
+        value: "./data/screenshots"
       - key: PYTHON_VERSION
         value: "3.12.0"
