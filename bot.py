@@ -1,4 +1,4 @@
-"""Vivino Contest Telegram Bot — main entry point."""
+-"""Vivino Contest Telegram Bot - main entry point."""
 
 import csv
 import io
@@ -21,7 +21,6 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
-    ConversationHandler,
     filters,
     ContextTypes,
 )
@@ -50,11 +49,11 @@ WAITING_SCREENSHOT = 3
 ASK_ANOTHER = 4
 
 
-def is_admin(user_id: int) -> bool:
+def is_admin(user_id):
     return user_id in config.ADMIN_IDS
 
 
-def get_current_wine() -> str | None:
+def get_current_wine():
     tz = timezone(timedelta(hours=3))
     now = datetime.now(tz)
     for period, wine in config.WINE_SCHEDULE.items():
@@ -67,7 +66,7 @@ def get_current_wine() -> str | None:
     return None
 
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_command(update, context):
     keyboard = [
         [InlineKeyboardButton("🍷 Вино недели", callback_data="wine_of_week")],
         [InlineKeyboardButton("📧 Зарегистрировать email", callback_data="register_email")],
@@ -84,14 +83,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📋 <b>Как участвовать:</b>\n"
         "1. Зарегистрируйте рабочий email (@luding.ru)\n"
         "2. Загрузите скриншот с оценкой вина Vivino\n"
-        "3. Каждый понедельник — розыгрыш среди участников!\n\n"
-        " Cada скриншот = один шанс в розыгрыше 🎲",
+        "3. Каждый понедельник - розыгрыш среди участников!\n\n"
+        "Каждый скриншот = один шанс в розыгрыше 🎲",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML",
     )
 
 
-async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def my_stats_command(update, context):
     user_id = update.effective_user.id
     stats = await get_user_stats(user_id)
     if not stats:
@@ -110,7 +109,9 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📅 Текущая неделя: {stats['week_key']}"
     )
     await update.message.reply_text(text, parse_mode="HTML")
-  async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def button_callback(update, context):
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -163,7 +164,9 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")],
         ]
         await query.edit_message_text(
-            "⚙️ <b>Админ-панель</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+            "⚙️ <b>Админ-панель</b>",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML")
 
     elif data == "back_to_main":
         keyboard = [
@@ -177,11 +180,12 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         wine_text = f"🍷 Вино недели: <b>{wine}</b>\n\n" if wine else ""
         await query.edit_message_text(
             f"{wine_text}Добро пожаловать в конкурс Vivino от Luding!",
-            reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML")
 
-    # Admin sub-menus
     elif data == "admin_stats":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         stats = await get_stats()
         await query.edit_message_text(
             f"📊 <b>Статистика бота</b>\n\n"
@@ -194,7 +198,8 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML")
 
     elif data == "admin_leaderboard":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         week_key = get_current_week_key()
         lb = await get_week_leaderboard(week_key)
         if not lb:
@@ -202,11 +207,12 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         lines = [f"🏆 <b>Лидеры недели {week_key}</b>\n"]
         for i, p in enumerate(lb, 1):
-            lines.append(f"{i}. {p['email']} — {p['screenshot_count']} скр.")
+            lines.append(f"{i}. {p['email']} - {p['screenshot_count']} скр.")
         await query.edit_message_text("\n".join(lines), parse_mode="HTML")
 
     elif data == "admin_participants":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         parts = await get_all_participants()
         if not parts:
             await query.edit_message_text("Нет участников.", parse_mode="HTML")
@@ -214,20 +220,22 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = ["👥 <b>Все участники</b>\n"]
         for p in parts:
             wins = p.get("win_count", 0) or 0
-            lines.append(f"• {p['email']} — {p['total_screenshots']} скр., {p['weeks_active']} нед., {wins} побед")
+            lines.append(f"• {p['email']} - {p['total_screenshots']} скр., {p['weeks_active']} нед., {wins} побед")
         text = "\n".join(lines)
         if len(text) > 4000:
             text = text[:4000] + "\n..."
         await query.edit_message_text(text, parse_mode="HTML")
 
     elif data == "admin_export":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         await query.edit_message_text(
-            "📤 Используйте команду:\n<code>/export</code> — текущая неделя\n<code>/export 2026-W26</code> — конкретная неделя",
+            "📤 Используйте команду:\n<code>/export</code> - текущая неделя\n<code>/export 2026-W26</code> - конкретная неделя",
             parse_mode="HTML")
 
     elif data == "admin_winners":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         winners = await get_all_winners()
         if not winners:
             await query.edit_message_text("Победителей пока нет.", parse_mode="HTML")
@@ -238,20 +246,27 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("\n".join(lines), parse_mode="HTML")
 
     elif data == "admin_raffle":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         week_key = get_previous_week_key()
         if await is_winner_already_chosen(week_key):
-            await query.edit_message_text(f"Победитель за {week_key} уже выбран!", parse_mode="HTML")
+            await query.edit_message_text(
+                f"Победитель за {week_key} уже выбран!",
+                parse_mode="HTML")
             return
         participants = await get_week_participants(week_key)
         if not participants:
-            await query.edit_message_text(f"Нет участников за {week_key}.", parse_mode="HTML")
+            await query.edit_message_text(
+                f"Нет участников за {week_key}.",
+                parse_mode="HTML")
             return
         weights = [p["screenshot_count"] for p in participants]
         winner = random.choices(participants, weights=weights, k=1)[0]
         context.user_data["pending_winner"] = {
-            "week_key": week_key, "user_id": winner["user_id"],
-            "email": winner["email"], "count": winner["screenshot_count"],
+            "week_key": week_key,
+            "user_id": winner["user_id"],
+            "email": winner["email"],
+            "count": winner["screenshot_count"],
         }
         keyboard = [
             [InlineKeyboardButton("✅ Подтвердить", callback_data="confirm_raffle")],
@@ -263,10 +278,12 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🏆 Победитель: <b>{winner['email']}</b>\n"
             f"Скриншотов: {winner['screenshot_count']}\n\n"
             "Подтвердить?",
-            reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML")
 
     elif data == "confirm_raffle":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         pw = context.user_data.get("pending_winner")
         if not pw:
             await query.edit_message_text("Нет данных для подтверждения.", parse_mode="HTML")
@@ -286,12 +303,50 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("pending_winner", None)
 
     elif data == "cancel_raffle":
-        if not is_admin(user.id): return
+        if not is_admin(user.id):
+            return
         context.user_data.pop("pending_winner", None)
         await query.edit_message_text("Розыгрыш отменён.", parse_mode="HTML")
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_screenshot(update, context, user_id, email):
+    """Process an uploaded screenshot."""
+    photos = update.message.photo
+    if not photos:
+        await update.message.reply_text("❌ Это не фото. Отправьте скриншот (JPG/PNG).")
+        return
+
+    file = photos[-1]
+    file_unique_id = file.file_unique_id
+
+    if await is_duplicate_screenshot(user_id, file_unique_id):
+        await update.message.reply_text("⚠️ Этот скриншот уже был загружен!")
+        return
+
+    try:
+        os.makedirs(config.SCREENSHOTS_DIR, exist_ok=True)
+        file_obj = await file.get_file()
+        file_path = os.path.join(config.SCREENSHOTS_DIR, f"{file_unique_id}.jpg")
+        await file_obj.download_to_drive(file_path)
+    except Exception as e:
+        logger.error(f"Download error: {e}")
+        await update.message.reply_text("❌ Ошибка сохранения. Попробуйте снова.")
+        return
+
+    week_key = get_current_week_key()
+    if await save_screenshot(user_id, email, file.file_id, file_unique_id, file_path, week_key):
+        count = await get_week_screenshots_count(week_key)
+        wine = get_current_wine()
+        await update.message.reply_text(
+            f"✅ Скриншот принят! ({wine})\n"
+            f"📸 Всего за неделю: {count}\n"
+            f"Отправить ещё? Или нажмите /start для меню.",
+            parse_mode="HTML")
+    else:
+        await update.message.reply_text("⚠️ Ошибка дублирования.")
+
+
+async def handle_message(update, context):
     state = context.user_data.get("state")
 
     if state == WAITING_EMAIL:
@@ -300,7 +355,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "❌ Допускаются только рабочие email @luding.ru!\nПопробуйте снова:")
             return
-        success, msg = await register_user(update.effective_user.id, update.effective_user.username, email)
+        success, msg = await register_user(
+            update.effective_user.id, update.effective_user.username, email)
         await update.message.reply_text(msg, parse_mode="HTML")
         if success:
             context.user_data["state"] = None
@@ -312,40 +368,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Email не найден. Зарегистрируйтесь заново.")
             context.user_data["state"] = None
             return
-
-        photos = update.message.photo
-        if not photos:
-            await update.message.reply_text("❌ Это не фото. Отправьте скриншот (JPG/PNG).")
-            return
-
-        file = photos[-1]
-        file_unique_id = file.file_unique_id
-
-        if await is_duplicate_screenshot(user_id, file_unique_id):
-            await update.message.reply_text("⚠️ Этот скриншот уже был загружен!")
-            return
-
-        try:
-            os.makedirs(config.SCREENSHOTS_DIR, exist_ok=True)
-            file_obj = await file.get_file()
-            file_path = os.path.join(config.SCREENSHOTS_DIR, f"{file_unique_id}.jpg")
-            await file_obj.download_to_drive(file_path)
-        except Exception as e:
-            logger.error(f"Download error: {e}")
-            await update.message.reply_text("❌ Ошибка сохранения. Попробуйте снова.")
-            return
-
-        week_key = get_current_week_key()
-        if await save_screenshot(user_id, email, file.file_id, file_unique_id, file_path, week_key):
-            count = await get_week_screenshots_count(week_key)
-            wine = get_current_wine()
-            await update.message.reply_text(
-                f"✅ Скриншот принят! ({wine})\n"
-                f"📸 Всего за неделю: {count}\n"
-                f"Отправить ещё? Или нажмите /start для меню.",
-                parse_mode="HTML")
-        else:
-            await update.message.reply_text("⚠️ Ошибка дублирования.")
+        await handle_screenshot(update, context, user_id, email)
         context.user_data["state"] = ASK_ANOTHER
 
     elif state == ASK_ANOTHER:
@@ -356,30 +379,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Email не найден.")
                 context.user_data["state"] = None
                 return
-            photos = update.message.photo
-            file = photos[-1]
-            file_unique_id = file.file_unique_id
-            if await is_duplicate_screenshot(user_id, file_unique_id):
-                await update.message.reply_text("⚠️ Этот скриншот уже был загружен!")
-                return
-            try:
-                os.makedirs(config.SCREENSHOTS_DIR, exist_ok=True)
-                file_obj = await file.get_file()
-                file_path = os.path.join(config.SCREENSHOTS_DIR, f"{file_unique_id}.jpg")
-                await file_obj.download_to_drive(file_path)
-            except Exception as e:
-                logger.error(f"Download error: {e}")
-                await update.message.reply_text("❌ Ошибка сохранения.")
-                return
-            week_key = get_current_week_key()
-            if await save_screenshot(user_id, email, file.file_id, file_unique_id, file_path, week_key):
-                count = await get_week_screenshots_count(week_key)
-                await update.message.reply_text(f"✅ Ещё один скриншот! Всего за неделю: {count}")
-            else:
-                await update.message.reply_text("⚠️ Ошибка дублирования.")
+            await handle_screenshot(update, context, user_id, email)
         else:
             await update.message.reply_text("Отправьте фото или нажмите /start для меню.")
-          async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def export_command(update, context):
     if not is_admin(update.effective_user.id):
         return
     week_key = context.args[0] if context.args else get_current_week_key()
@@ -392,7 +397,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     writer = csv.writer(output)
     writer.writerow(["email", "user_id", "username", "submitted_at", "week_key", "file_id"])
     for s in screenshots:
-        writer.writerow([s["email"], s["user_id"], s.get("username", ""), s["submitted_at"], s["week_key"], s["file_id"]])
+        writer.writerow([
+            s["email"], s["user_id"], s.get("username", ""),
+            s["submitted_at"], s["week_key"], s["file_id"]])
 
     output.seek(0)
     await update.message.reply_document(
@@ -400,8 +407,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption=f"📊 Экспорт за {week_key}: {len(screenshots)} записей")
 
 
-async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
-    """Friday 18:00 MSK — remind users with 0 screenshots this week."""
+async def reminder_job(context):
+    """Friday 18:00 MSK - remind users with 0 screenshots this week."""
     user_ids = await get_registered_user_ids()
     week_key = get_current_week_key()
     wine = get_current_wine() or "текущее вино"
@@ -432,14 +439,13 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"ok")
 
     def log_message(self, format, *args):
-        pass  # Suppress health-check logs
+        pass
 
 
 async def post_init(application):
     await init_db()
     os.makedirs(config.SCREENSHOTS_DIR, exist_ok=True)
 
-    # Reminder job: every Friday at 18:00 MSK
     job_queue = application.job_queue
     job_queue.run_daily(
         reminder_job,
@@ -447,8 +453,9 @@ async def post_init(application):
         days=(config.REMINDER_DAY_OF_WEEK,),
         name="weekly_reminder",
     )
-    logger.info(f"[INIT] Reminder job scheduled: day={config.REMINDER_DAY_OF_WEEK} "
-                f"time={config.REMINDER_HOUR}:{config.REMINDER_MINUTE:02d} MSK")
+    logger.info(
+        f"[INIT] Reminder job scheduled: day={config.REMINDER_DAY_OF_WEEK} "
+        f"time={config.REMINDER_HOUR}:{config.REMINDER_MINUTE:02d} MSK")
 
 
 def main():
@@ -469,7 +476,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # Health-check HTTP server for Render.com
     port = int(os.environ.get("PORT", 10000))
     httpd = HTTPServer(("0.0.0.0", port), HealthHandler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
