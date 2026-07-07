@@ -14,6 +14,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaPhoto,
+    InputFile,
 )
 from telegram.ext import (
     Application,
