@@ -1,4 +1,4 @@
--"""Vivino Contest Telegram Bot - main entry point."""
+"""Vivino Contest Telegram Bot - main entry point."""
 
 import csv
 import io
