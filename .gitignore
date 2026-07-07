@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv-local/
+*.db
+screenshots/
+*.pid
+*.log
+daemon.py
+watchdog.sh
+start.sh
+stop.sh
+.env
