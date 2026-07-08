@@ -33,8 +33,8 @@ from database import (
     get_week_participants, get_week_screenshots_count,
     save_winner, is_winner_already_chosen, get_all_winners,
     get_stats, get_week_leaderboard, get_all_participants,
-    get_all_screenshots, get_screenshots_by_week,
-    get_registered_user_ids, week_key_to_display,
+    get_all_screenshots, get_screenshots_by_week, get_screenshots_by_email,
+    get_registered_user_ids, get_all_emails, week_key_to_display,
 )
 
 logging.basicConfig(
@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 WAITING_EMAIL = 1
 WAITING_SCREENSHOT = 2
 ASK_ANOTHER = 3
+WAITING_USER_EMAIL = 4
 
 
 def is_admin(user_id):
@@ -232,6 +233,7 @@ async def button_callback(update, context):
             [InlineKeyboardButton("\U0001f4f8 Скриншоты недели", callback_data="admin_screenshots")],
             [InlineKeyboardButton("\U0001f465 Участники", callback_data="admin_participants")],
             [InlineKeyboardButton("\U0001f4e4 Экспорт CSV + фото", callback_data="admin_export")],
+            [InlineKeyboardButton("\U0001f4f7 Скриншоты пользователя", callback_data="admin_user_screenshots")],
             [InlineKeyboardButton("\U0001f4dc История победителей", callback_data="admin_winners")],
             [InlineKeyboardButton("\U0001f519 Назад", callback_data="back_to_main")],
         ]
@@ -343,38 +345,44 @@ async def button_callback(update, context):
     elif data == "admin_raffle":
         if not is_admin(user.id):
             return
-        week_key = get_previous_week_key()
-        if await is_winner_already_chosen(week_key):
-            await query.edit_message_text(
-                f"Победитель за {week_key_to_display(week_key)} уже выбран!",
-                parse_mode="HTML")
+        keyboard = [
+            [InlineKeyboardButton(
+                f"\U0001f4c5 Прошлая неделя ({week_key_to_display(get_previous_week_key())})",
+                callback_data="raffle_week:previous")],
+            [InlineKeyboardButton(
+                f"\U0001f4c5 Текущая неделя ({week_key_to_display(get_current_week_key())})",
+                callback_data="raffle_week:current")],
+            [InlineKeyboardButton("\U0001f519 Назад", callback_data="admin_panel")],
+        ]
+        await query.edit_message_text(
+            "\U0001f3b0 <b>Розыгрыш</b>\n\nВыберите неделю:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML")
+
+    elif data and data.startswith("raffle_week:"):
+        if not is_admin(user.id):
             return
+        week_type = data.split(":")[1]
+        week_key = get_previous_week_key() if week_type == "previous" else get_current_week_key()
         participants = await get_week_participants(week_key)
         if not participants:
             await query.edit_message_text(
                 f"Нет участников за {week_key_to_display(week_key)}.",
                 parse_mode="HTML")
             return
-        weights = [p["screenshot_count"] for p in participants]
-        winner = random.choices(participants, weights=weights, k=1)[0]
-        context.user_data["pending_winner"] = {
-            "week_key": week_key,
-            "user_id": winner["user_id"],
-            "email": winner["email"],
-            "count": winner["screenshot_count"],
-        }
-        keyboard = [
-            [InlineKeyboardButton("\u2705 Подтвердить", callback_data="confirm_raffle")],
-            [InlineKeyboardButton("\u274c Отмена", callback_data="cancel_raffle")],
-        ]
-        await query.edit_message_text(
-            f"\U0001f3b0 <b>Предварительный результат розыгрыша {week_key_to_display(week_key)}</b>\n\n"
-            f"Участников: {len(participants)}\n\n"
-            f"\U0001f3c6 Победитель: <b>{winner['email']}</b>\n"
-            f"Скриншотов: {winner['screenshot_count']}\n\n"
-            "Подтвердить?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="HTML")
+        context.user_data["raffle_participants"] = participants
+        context.user_data["raffle_week_key"] = week_key
+        await _show_raffle_result(query, context, week_key, participants)
+
+    elif data == "reroll_raffle":
+        if not is_admin(user.id):
+            return
+        participants = context.user_data.get("raffle_participants")
+        week_key = context.user_data.get("raffle_week_key")
+        if not participants or not week_key:
+            await query.edit_message_text("Данные розыгрыша утеряны. Начните заново.", parse_mode="HTML")
+            return
+        await _show_raffle_result(query, context, week_key, participants)
 
     elif data == "confirm_raffle":
         if not is_admin(user.id):
@@ -384,24 +392,85 @@ async def button_callback(update, context):
             await query.edit_message_text("Нет данных для подтверждения.", parse_mode="HTML")
             return
         await save_winner(pw["user_id"], pw["email"], pw["week_key"])
-        try:
-            await context.bot.send_message(
-                chat_id=pw["user_id"],
-                text=f"\U0001f389 Поздравляем! Вы выиграли розыгрыш за неделю {week_key_to_display(pw['week_key'])}!\n"
-                     f"Ваше количество скриншотов: {pw['count']} \U0001f37b")
-        except Exception as e:
-            logger.error(f"Failed to notify winner: {e}")
+        keyboard = [
+            [InlineKeyboardButton("\U0001f4e8 Да, отправить", callback_data="notify_winner:yes")],
+            [InlineKeyboardButton("\U0001f6ab Нет", callback_data="notify_winner:no")],
+        ]
+        await query.edit_message_text(
+            f"\u2705 Победитель <b>{pw['email']}</b> за неделю {week_key_to_display(pw['week_key'])} сохранён!\n\n"
+            f"Отправить результат победителю?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML")
+
+    elif data and data.startswith("notify_winner:"):
+        if not is_admin(user.id):
+            return
+        pw = context.user_data.get("pending_winner")
+        if not pw:
+            await query.edit_message_text("Данные утеряны.", parse_mode="HTML")
+            return
+        notify = data.split(":")[1]
+        if notify == "yes":
+            try:
+                await context.bot.send_message(
+                    chat_id=pw["user_id"],
+                    text=f"\U0001f389 Поздравляем! Вы выиграли розыгрыш за неделю {week_key_to_display(pw['week_key'])}!\n"
+                         f"Ваше количество скриншотов: {pw['count']} \U0001f37b")
+                result_text = "Уведомление отправлено."
+            except Exception as e:
+                logger.error(f"Failed to notify winner: {e}")
+                result_text = "\u26a0\ufe0f Не удалось отправить уведомление (возможно, бот заблокирован)."
+        else:
+            result_text = "Без уведомления победителя."
         await query.edit_message_text(
             f"\u2705 Победитель <b>{pw['email']}</b> за неделю {week_key_to_display(pw['week_key'])} утверждён!\n"
-            f"Уведомление отправлено.",
+            f"{result_text}",
             parse_mode="HTML")
         context.user_data.pop("pending_winner", None)
+        context.user_data.pop("raffle_participants", None)
+        context.user_data.pop("raffle_week_key", None)
+
+    elif data == "admin_user_screenshots":
+        if not is_admin(user.id):
+            return
+        await query.edit_message_text(
+            "\U0001f4f7 <b>Скриншоты пользователя</b>\n\n"
+            "Введите email участника (домен luding.ru):",
+            parse_mode="HTML")
+        context.user_data["state"] = WAITING_USER_EMAIL
 
     elif data == "cancel_raffle":
         if not is_admin(user.id):
             return
         context.user_data.pop("pending_winner", None)
+        context.user_data.pop("raffle_participants", None)
+        context.user_data.pop("raffle_week_key", None)
         await query.edit_message_text("Розыгрыш отменён.", parse_mode="HTML")
+
+
+async def _show_raffle_result(query, context, week_key, participants):
+    """Pick a random winner and show result with action buttons."""
+    weights = [p["screenshot_count"] for p in participants]
+    winner = random.choices(participants, weights=weights, k=1)[0]
+    context.user_data["pending_winner"] = {
+        "week_key": week_key,
+        "user_id": winner["user_id"],
+        "email": winner["email"],
+        "count": winner["screenshot_count"],
+    }
+    keyboard = [
+        [InlineKeyboardButton("\u2705 Подтвердить", callback_data="confirm_raffle")],
+        [InlineKeyboardButton("\U0001f504 Выбрать заново", callback_data="reroll_raffle")],
+        [InlineKeyboardButton("\u274c Отмена", callback_data="cancel_raffle")],
+    ]
+    await query.edit_message_text(
+        f"\U0001f3b0 <b>Розыгрыш {week_key_to_display(week_key)}</b>\n\n"
+        f"Участников: {len(participants)}\n\n"
+        f"\U0001f3c6 Победитель: <b>{winner['email']}</b>\n"
+        f"Скриншотов: {winner['screenshot_count']}\n\n"
+        "Подтвердить или выбрать заново?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML")
 
 
 async def handle_screenshot(update, context, user_id, email):
@@ -472,6 +541,38 @@ async def handle_message(update, context):
             return
         await handle_screenshot(update, context, user_id, email)
         context.user_data["state"] = ASK_ANOTHER
+
+    elif state == WAITING_USER_EMAIL:
+        email = update.message.text.strip()
+        context.user_data["state"] = None
+        shots = await get_screenshots_by_email(email)
+        if not shots:
+            await update.message.reply_text(
+                f"\U0001f4f8 У пользователя <b>{email}</b> нет скриншотов.",
+                parse_mode="HTML")
+            return
+        lines = [f"\U0001f4f8 <b>Скриншоты {email}</b> ({len(shots)} шт.):\n"]
+        for i, s in enumerate(shots, 1):
+            dt = s["submitted_at"][:16].replace("T", " ")
+            lines.append(f"{i}. {week_key_to_display(s['week_key'])} - {dt}")
+        text = "\n".join(lines)
+        if len(text) > 4096:
+            text = text[:4000] + "\n..."
+        await update.message.reply_text(text, parse_mode="HTML")
+
+        chat_id = update.effective_chat.id
+        await update.message.reply_text("\U0001f4f8 Фото \u2b07")
+        for batch_start in range(0, len(shots), 10):
+            batch = shots[batch_start:batch_start + 10]
+            media = []
+            for s in batch:
+                caption = f"{email} - {week_key_to_display(s['week_key'])}"
+                media.append(InputMediaPhoto(media=s["file_id"], caption=caption))
+            try:
+                await context.bot.send_media_group(chat_id=chat_id, media=media)
+            except Exception as e:
+                logger.error(f"[USER_SHOTS] Failed to send photo batch: {e}")
+                await update.message.reply_text("\u26a0\ufe0f Не удалось отправить часть фото")
 
     elif state == ASK_ANOTHER:
         if update.message.photo:

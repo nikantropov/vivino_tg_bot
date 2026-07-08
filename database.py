@@ -318,6 +318,28 @@ async def get_registered_user_ids():
         return [r["user_id"] for r in rows]
 
 
+async def get_screenshots_by_email(email):
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT s.email, s.user_id, s.file_id, s.file_path, s.submitted_at, s.week_key,
+                   u.username
+            FROM screenshots s
+            LEFT JOIN users u ON s.user_id = u.user_id
+            WHERE s.email = $1
+            ORDER BY s.submitted_at DESC
+        """, email)
+        return [dict(r) for r in rows]
+
+
+async def get_all_emails():
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT email FROM users ORDER BY email")
+        return [r["email"] for r in rows]
+
+
 async def get_screenshots_by_week(week_key):
     pool = await get_pool()
     async with pool.acquire() as conn:
