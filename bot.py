@@ -96,9 +96,7 @@ async def start_command(update, context):
     stats = await get_user_stats(user.id)
     if stats and stats["this_week"] > 0:
         await update.message.reply_text(
-            "\U0001f389 Спасибо за участие! "
-            "Результаты розыгрыша огласим в понедельник. Удачи! \U0001f340\n"
-            "Загрузить ещё скриншот? Каждый = шанс в розыгрыше \U0001f3b2")
+            "\U0001f389 Спасибо за участие! Загрузить ещё скриншот?")
 
     await update.message.reply_text(
         f"{wine_text}Добро пожаловать в конкурс Vivino от Luding Group!\n\n"
