@@ -2,19 +2,11 @@ services:
   - type: web
     name: vivino-bot
     runtime: python
-    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
+    healthCheckPath: /
     envVars:
-      - key: BOT_TOKEN
-        sync: false
-      - key: ADMIN_IDS
-        value: "1214258573,472343594"
-      - key: CHANNEL_ID
-        value: "@proLuding"
-      - key: DB_PATH
-        value: "./data/vivino_bot.db"
-      - key: SCREENSHOTS_DIR
-        value: "./data/screenshots"
       - key: PYTHON_VERSION
-        value: "3.12.0"
+        value: 3.12.4
+      - key: PORT
+        value: 10000

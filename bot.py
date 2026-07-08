@@ -487,11 +487,10 @@ async def reminder_job(context):
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"ok")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"ok")
 
     def log_message(self, format, *args):
         pass
@@ -534,5 +533,5 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     httpd = HTTPServer(("0.0.0.0", port), HealthHandler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    print(f"[HEALTH] Health-check server on port {port}")
+    print(f"[HEALTH] Health-check server on 0.0.0.0:{port} (responds to / and /health)")
     main()
