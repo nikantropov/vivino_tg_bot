@@ -84,7 +84,6 @@ def get_current_wine():
 async def start_command(update, context):
     user = update.effective_user
     keyboard = [
-        [InlineKeyboardButton("\U0001f377 Вино недели", callback_data="wine_of_week")],
         [InlineKeyboardButton("\U0001f4e7 Зарегистрировать email", callback_data="register_email")],
         [InlineKeyboardButton("\U0001f4f8 Загрузить скриншот", callback_data="upload_screenshot")],
     ]
@@ -246,7 +245,6 @@ async def button_callback(update, context):
 
     elif data == "back_to_main":
         keyboard = [
-            [InlineKeyboardButton("\U0001f377 Вино недели", callback_data="wine_of_week")],
             [InlineKeyboardButton("\U0001f4e7 Зарегистрировать email", callback_data="register_email")],
             [InlineKeyboardButton("\U0001f4f8 Загрузить скриншот", callback_data="upload_screenshot")],
         ]
@@ -523,16 +521,15 @@ async def handle_message(update, context):
         success, msg = await register_user(
             update.effective_user.id, update.effective_user.username, email)
         await update.message.reply_text(msg, parse_mode="HTML")
-        if success:
-            wine = get_current_wine()
-            if wine:
-                await update.message.reply_text(
-                    f"📸 Отправьте скриншот с оценкой вина <b>{wine}</b> из Vivino.\n\n"
-                    "Поддерживаются форматы: JPG, PNG.",
-                    parse_mode="HTML")
-                context.user_data["state"] = WAITING_SCREENSHOT
-            else:
-                context.user_data["state"] = None
+        wine = get_current_wine()
+        if wine:
+            await update.message.reply_text(
+                f"\U0001f4f8 Отправьте скриншот с оценкой вина <b>{wine}</b> из Vivino.\n\n"
+                "Поддерживаются форматы: JPG, PNG.",
+                parse_mode="HTML")
+            context.user_data["state"] = WAITING_SCREENSHOT
+        else:
+            context.user_data["state"] = None
 
     elif state == WAITING_SCREENSHOT:
         user_id = update.effective_user.id
