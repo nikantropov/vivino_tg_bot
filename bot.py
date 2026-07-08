@@ -95,11 +95,13 @@ async def start_command(update, context):
     wine_text = f"\U0001f377 Вино недели: <b>{wine}</b>\n\n" if wine else ""
 
     await update.message.reply_text(
-        f"{wine_text}Добро пожаловать в конкурс Vivino от Luding!\n\n"
+        f"{wine_text}Добро пожаловать в конкурс Vivino от Luding Group!\n\n"
+        "Vivino — один из главных ориентиров при выборе вина, как для покупателей в магазине, так и для наших корпоративных клиентов. "
+        "Каждая ваша оценка помогает винам недели быть заметнее — а нам не за что краснеть перед продуктом, который мы сами выбрали. \U0001f60a\n\n"
         "\U0001f4cb <b>Как участвовать:</b>\n"
         "1. Зарегистрируйте рабочий email (\u0434\u043e\u043c\u0435\u043d luding.ru)\n"
-        "2. Загрузите скриншот с оценкой вина Vivino\n"
-        "3. Каждый понедельник - розыгрыш среди участников!\n\n"
+        "2. Загрузите скриншот с оценкой вина недели из приложения Vivino\n"
+        "3. Каждый понедельник — розыгрыш среди участников \U0001f377\n\n"
         "Каждый скриншот = один шанс в розыгрыше \U0001f3b2",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML",
@@ -253,7 +255,7 @@ async def button_callback(update, context):
         wine = get_current_wine()
         wine_text = f"\U0001f377 Вино недели: <b>{wine}</b>\n\n" if wine else ""
         await query.edit_message_text(
-            f"{wine_text}Добро пожаловать в конкурс Vivino от Luding!",
+            f"{wine_text}Добро пожаловать в конкурс Vivino от Luding Group!",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML")
 
