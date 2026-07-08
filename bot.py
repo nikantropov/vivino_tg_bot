@@ -83,20 +83,28 @@ def get_current_wine():
 
 async def start_command(update, context):
     user = update.effective_user
+    wine = get_current_wine()
+    wine_text = f"\U0001f377 Вино недели: <b>{wine}</b>\n\n" if wine else ""
+
+    stats = await get_user_stats(user.id)
+    if stats and stats["this_week"] > 0:
+        keyboard = []
+        if is_admin(user.id):
+            keyboard.append([InlineKeyboardButton("\u2699\ufe0f Админ-панель", callback_data="admin_panel")])
+        text = f"{wine_text}\U0001f389 Спасибо за участие! Загрузить ещё скриншот?"
+        if keyboard:
+            await update.message.reply_text(
+                text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            await update.message.reply_text(text, parse_mode="HTML")
+        return
+
     keyboard = [
         [InlineKeyboardButton("\U0001f4e7 Зарегистрировать email", callback_data="register_email")],
         [InlineKeyboardButton("\U0001f4f8 Загрузить скриншот", callback_data="upload_screenshot")],
     ]
     if is_admin(user.id):
         keyboard.append([InlineKeyboardButton("\u2699\ufe0f Админ-панель", callback_data="admin_panel")])
-
-    wine = get_current_wine()
-    wine_text = f"\U0001f377 Вино недели: <b>{wine}</b>\n\n" if wine else ""
-
-    stats = await get_user_stats(user.id)
-    if stats and stats["this_week"] > 0:
-        await update.message.reply_text(
-            "\U0001f389 Спасибо за участие! Загрузить ещё скриншот?")
 
     await update.message.reply_text(
         f"{wine_text}Добро пожаловать в конкурс Vivino от Luding Group!\n\n"
