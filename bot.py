@@ -52,16 +52,31 @@ def is_admin(user_id):
     return user_id in config.ADMIN_IDS
 
 
+def _parse_period_date(date_str, year, tz):
+    """Parse 'DD.MM' string into datetime with timezone. Handles year rollover."""
+    day, month = map(int, date_str.split("."))
+    try:
+        return datetime(year, month, day, tzinfo=tz)
+    except ValueError:
+        # month rolled over to next year (e.g. 27.12-02.01)
+        return datetime(year + 1, month, day, tzinfo=tz)
+
+
 def get_current_wine():
     tz = timezone(timedelta(hours=3))
     now = datetime.now(tz)
     for period, wine in config.WINE_SCHEDULE.items():
         start_str, end_str = period.split("-")
-        start = datetime.strptime(f"{now.year}.{start_str}", "%Y.%d.%m").replace(tzinfo=tz)
-        end = datetime.strptime(f"{now.year}.{end_str}", "%Y.%d.%m").replace(
-            tzinfo=tz, hour=23, minute=59, second=59)
-        if start <= now <= end:
-            return wine
+        start = _parse_period_date(start_str, now.year, tz)
+        end = _parse_period_date(end_str, now.year, tz).replace(
+            hour=23, minute=59, second=59)
+        if end < start:
+            # Period crosses a month/year boundary (e.g. 27.07-02.08)
+            if now >= start or now <= end:
+                return wine
+        else:
+            if start <= now <= end:
+                return wine
     return None
 
 
