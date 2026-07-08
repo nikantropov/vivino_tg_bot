@@ -88,7 +88,9 @@ async def start_command(update, context):
 
     stats = await get_user_stats(user.id)
     if stats and stats["this_week"] > 0:
-        keyboard = []
+        keyboard = [
+            [InlineKeyboardButton("\U0001f4f8 Загрузить скриншот", callback_data="upload_screenshot")],
+        ]
         if is_admin(user.id):
             keyboard.append([InlineKeyboardButton("\u2699\ufe0f Админ-панель", callback_data="admin_panel")])
         text = f"{wine_text}\U0001f389 Спасибо за участие! Загрузить ещё скриншот?"
