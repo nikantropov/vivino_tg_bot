@@ -93,8 +93,15 @@ async def start_command(update, context):
     wine = get_current_wine()
     wine_text = f"\U0001f377 Вино недели: <b>{wine}</b>\n\n" if wine else ""
 
+    stats = await get_user_stats(user.id)
+    thanks_text = ""
+    if stats and stats["this_week"] > 0:
+        thanks_text = ("\U0001f389 Спасибо за участие! "
+                       "Результаты розыгрыша огласим в понедельник. Удачи! \U0001f340\n"
+                       f"Загрузить ещё скриншот? Каждый = шанс в розыгрыше \U0001f3b2\n\n")
+
     await update.message.reply_text(
-        f"{wine_text}Добро пожаловать в конкурс Vivino от Luding Group!\n\n"
+        f"{wine_text}{thanks_text}Добро пожаловать в конкурс Vivino от Luding Group!\n\n"
         "Vivino — один из главных ориентиров при выборе вина, как для покупателей в магазине, так и для наших корпоративных клиентов. "
         "Каждая ваша оценка помогает винам недели быть заметнее — а нам не за что краснеть перед продуктом, который мы сами выбрали. \U0001f60a\n\n"
         "\U0001f4cb <b>Как участвовать:</b>\n"
@@ -505,6 +512,8 @@ async def handle_screenshot(update, context, user_id, email):
             f"\U0001f4f8 Всего за неделю: {count}\n"
             f"Отправить ещё? Или нажмите /start для меню.",
             parse_mode="HTML")
+        await update.message.reply_text(
+            "\U0001f389 Спасибо за участие! Результаты розыгрыша огласим в понедельник. Удачи! \U0001f340")
     else:
         await update.message.reply_text("\u26a0\ufe0f Ошибка дублирования.")
 
