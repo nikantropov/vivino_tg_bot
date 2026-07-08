@@ -34,7 +34,7 @@ from database import (
     save_winner, is_winner_already_chosen, get_all_winners,
     get_stats, get_week_leaderboard, get_all_participants,
     get_all_screenshots, get_screenshots_by_week,
-    get_registered_user_ids,
+    get_registered_user_ids, week_key_to_display,
 )
 
 logging.basicConfig(
@@ -44,9 +44,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 WAITING_EMAIL = 1
-CONFIRM_RAFFLE = 2
-WAITING_SCREENSHOT = 3
-ASK_ANOTHER = 4
+WAITING_SCREENSHOT = 2
+ASK_ANOTHER = 3
 
 
 def is_admin(user_id):
@@ -67,24 +66,25 @@ def get_current_wine():
 
 
 async def start_command(update, context):
+    user = update.effective_user
     keyboard = [
-        [InlineKeyboardButton("🍷 Вино недели", callback_data="wine_of_week")],
-        [InlineKeyboardButton("📧 Зарегистрировать email", callback_data="register_email")],
-        [InlineKeyboardButton("📸 Загрузить скриншот", callback_data="upload_screenshot")],
+        [InlineKeyboardButton("\U0001f377 Вино недели", callback_data="wine_of_week")],
+        [InlineKeyboardButton("\U0001f4e7 Зарегистрировать email", callback_data="register_email")],
+        [InlineKeyboardButton("\U0001f4f8 Загрузить скриншот", callback_data="upload_screenshot")],
     ]
-    if is_admin(update.effective_user.id):
-        keyboard.append([InlineKeyboardButton("⚙️ Админ-панель", callback_data="admin_panel")])
+    if is_admin(user.id):
+        keyboard.append([InlineKeyboardButton("\u2699\ufe0f Админ-панель", callback_data="admin_panel")])
 
     wine = get_current_wine()
-    wine_text = f"🍷 Вино недели: <b>{wine}</b>\n\n" if wine else ""
+    wine_text = f"\U0001f377 Вино недели: <b>{wine}</b>\n\n" if wine else ""
 
     await update.message.reply_text(
         f"{wine_text}Добро пожаловать в конкурс Vivino от Luding!\n\n"
-        "📋 <b>Как участвовать:</b>\n"
-        "1. Зарегистрируйте рабочий email (@luding.ru)\n"
+        "\U0001f4cb <b>Как участвовать:</b>\n"
+        "1. Зарегистрируйте рабочий email (\u0434\u043e\u043c\u0435\u043d luding.ru)\n"
         "2. Загрузите скриншот с оценкой вина Vivino\n"
         "3. Каждый понедельник - розыгрыш среди участников!\n\n"
-        "Каждый скриншот = один шанс в розыгрыше 🎲",
+        "Каждый скриншот = один шанс в розыгрыше \U0001f3b2",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML",
     )
@@ -99,16 +99,72 @@ async def my_stats_command(update, context):
 
     rank_str = f"#{stats['week_rank']}" if stats['week_rank'] else "нет"
     text = (
-        f"📊 <b>Ваша статистика</b>\n\n"
-        f"📧 Email: {stats['email']}\n"
-        f"📸 Всего скриншотов: {stats['total_screenshots']}\n"
-        f"📅 Эта неделя: {stats['this_week']} скр.\n"
-        f"🏆 Побед: {stats['wins']}\n"
-        f"📈 Рейтинг недели: {rank_str} из {stats['week_participants']}\n"
-        f"🗓 Активных недель: {stats['weeks_active']}\n"
-        f"📅 Текущая неделя: {stats['week_key']}"
+        f"\U0001f4ca <b>Ваша статистика</b>\n\n"
+        f"\U0001f4e7 Email: {stats['email']}\n"
+        f"\U0001f4f8 Всего скриншотов: {stats['total_screenshots']}\n"
+        f"\U0001f4c5 Эта неделя: {stats['this_week']} скр.\n"
+        f"\U0001f3c6 Побед: {stats['wins']}\n"
+        f"\U0001f4c8 Рейтинг недели: {rank_str} из {stats['week_participants']}\n"
+        f"\U0001f5d3 Активных недель: {stats['weeks_active']}\n"
+        f"\U0001f4c5 Текущая неделя: {week_key_to_display(stats['week_key'])}"
     )
     await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def screenshots_command(update, context):
+    if not is_admin(update.effective_user.id):
+        return
+    week_key = context.args[0] if context.args else get_current_week_key()
+    shots = await get_screenshots_by_week(week_key)
+    if not shots:
+        await update.message.reply_text(f"\U0001f4f8 Нет скриншотов за неделю {week_key_to_display(week_key)}.")
+        return
+    lines = [f"\U0001f4f8 <b>Скриншоты за {week_key_to_display(week_key)}</b> ({len(shots)} шт.):\n"]
+    for i, s in enumerate(shots, 1):
+        dt = s["submitted_at"][:16].replace("T", " ")
+        username = f"@{s['username']}" if s.get("username") else ""
+        lines.append(f"{i}. {s['email']} {username} - {dt}")
+    text = "\n".join(lines)
+    if len(text) > 4096:
+        text = text[:4000] + "\n..."
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def export_command(update, context):
+    if not is_admin(update.effective_user.id):
+        return
+    week_key = context.args[0] if context.args else get_current_week_key()
+    screenshots = await get_screenshots_by_week(week_key)
+    if not screenshots:
+        await update.message.reply_text(f"Нет данных за {week_key_to_display(week_key)}.")
+        return
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["email", "user_id", "username", "submitted_at", "week_key", "file_id"])
+    for s in screenshots:
+        writer.writerow([
+            s["email"], s["user_id"], s.get("username", ""),
+            s["submitted_at"], s["week_key"], s["file_id"]])
+    output.seek(0)
+    await update.message.reply_document(
+        document=InputFile(output, filename=f"vivino_export_{week_key_to_display(week_key).replace('.', '_')}.csv"),
+        caption=f"\U0001f4ca Экспорт за {week_key_to_display(week_key)}: {len(screenshots)} записей")
+
+    chat_id = update.effective_chat.id
+    await update.message.reply_text("\U0001f4f8 Скриншоты \u2b07")
+    for batch_start in range(0, len(screenshots), 10):
+        batch = screenshots[batch_start:batch_start + 10]
+        media = []
+        for s in batch:
+            dt = s["submitted_at"][:16].replace("T", " ")
+            caption = f"{s['email']} - {dt}\nНеделя: {week_key_to_display(s['week_key'])}"
+            media.append(InputMediaPhoto(media=s["file_id"], caption=caption))
+        try:
+            await context.bot.send_media_group(chat_id=chat_id, media=media)
+        except Exception as e:
+            logger.error(f"[EXPORT] Failed to send photo batch: {e}")
+            await update.message.reply_text("\u26a0\ufe0f Не удалось отправить часть фото")
 
 
 async def button_callback(update, context):
@@ -121,7 +177,7 @@ async def button_callback(update, context):
         wine = get_current_wine()
         if wine:
             await query.edit_message_text(
-                f"🍷 <b>Вино этой недели:</b> {wine}\n\n"
+                f"\U0001f377 <b>Вино этой недели:</b> {wine}\n\n"
                 "Сделайте скриншот оценки этого вина в приложении Vivino и отправьте его боту!",
                 parse_mode="HTML")
         else:
@@ -129,7 +185,7 @@ async def button_callback(update, context):
 
     elif data == "register_email":
         await query.edit_message_text(
-            "📧 Введите ваш рабочий email (@luding.ru):\n\n"
+            "\U0001f4e7 Введите ваш рабочий email (\u0434\u043e\u043c\u0435\u043d luding.ru):\n\n"
             "<i>Пример: ivan@luding.ru</i>",
             parse_mode="HTML")
         context.user_data["state"] = WAITING_EMAIL
@@ -137,7 +193,7 @@ async def button_callback(update, context):
     elif data == "upload_screenshot":
         if not await is_user_registered(user.id):
             await query.edit_message_text(
-                "❌ Сначала зарегистрируйте email!\nНажмите «Зарегистрировать email».",
+                "\u274c Сначала зарегистрируйте email!\nНажмите «Зарегистрировать email».",
                 parse_mode="HTML")
             return
         wine = get_current_wine()
@@ -145,39 +201,40 @@ async def button_callback(update, context):
             await query.edit_message_text("Сейчас нет активного вина недели.", parse_mode="HTML")
             return
         await query.edit_message_text(
-            f"📸 Отправьте скриншот с оценкой вина <b>{wine}</b> из Vivino.\n\n"
+            f"\U0001f4f8 Отправьте скриншот с оценкой вина <b>{wine}</b> из Vivino.\n\n"
             "Поддерживаются форматы: JPG, PNG.",
             parse_mode="HTML")
         context.user_data["state"] = WAITING_SCREENSHOT
 
     elif data == "admin_panel":
         if not is_admin(user.id):
-            await query.edit_message_text("⛔ Доступ запрещён.", parse_mode="HTML")
+            await query.edit_message_text("\u26d4 Доступ запрещён.", parse_mode="HTML")
             return
         keyboard = [
-            [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
-            [InlineKeyboardButton("🏆 Розыгрыш", callback_data="admin_raffle")],
-            [InlineKeyboardButton("📋 Таблица лидеров", callback_data="admin_leaderboard")],
-            [InlineKeyboardButton("👥 Участники", callback_data="admin_participants")],
-            [InlineKeyboardButton("📤 Экспорт CSV", callback_data="admin_export")],
-            [InlineKeyboardButton("📜 История победителей", callback_data="admin_winners")],
-            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")],
+            [InlineKeyboardButton("\U0001f4ca Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton("\U0001f3c6 Розыгрыш", callback_data="admin_raffle")],
+            [InlineKeyboardButton("\U0001f4cb Таблица лидеров", callback_data="admin_leaderboard")],
+            [InlineKeyboardButton("\U0001f4f8 Скриншоты недели", callback_data="admin_screenshots")],
+            [InlineKeyboardButton("\U0001f465 Участники", callback_data="admin_participants")],
+            [InlineKeyboardButton("\U0001f4e4 Экспорт CSV + фото", callback_data="admin_export")],
+            [InlineKeyboardButton("\U0001f4dc История победителей", callback_data="admin_winners")],
+            [InlineKeyboardButton("\U0001f519 Назад", callback_data="back_to_main")],
         ]
         await query.edit_message_text(
-            "⚙️ <b>Админ-панель</b>",
+            "\u2699\ufe0f <b>Админ-панель</b>",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML")
 
     elif data == "back_to_main":
         keyboard = [
-            [InlineKeyboardButton("🍷 Вино недели", callback_data="wine_of_week")],
-            [InlineKeyboardButton("📧 Зарегистрировать email", callback_data="register_email")],
-            [InlineKeyboardButton("📸 Загрузить скриншот", callback_data="upload_screenshot")],
+            [InlineKeyboardButton("\U0001f377 Вино недели", callback_data="wine_of_week")],
+            [InlineKeyboardButton("\U0001f4e7 Зарегистрировать email", callback_data="register_email")],
+            [InlineKeyboardButton("\U0001f4f8 Загрузить скриншот", callback_data="upload_screenshot")],
         ]
         if is_admin(user.id):
-            keyboard.append([InlineKeyboardButton("⚙️ Админ-панель", callback_data="admin_panel")])
+            keyboard.append([InlineKeyboardButton("\u2699\ufe0f Админ-панель", callback_data="admin_panel")])
         wine = get_current_wine()
-        wine_text = f"🍷 Вино недели: <b>{wine}</b>\n\n" if wine else ""
+        wine_text = f"\U0001f377 Вино недели: <b>{wine}</b>\n\n" if wine else ""
         await query.edit_message_text(
             f"{wine_text}Добро пожаловать в конкурс Vivino от Luding!",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -188,13 +245,13 @@ async def button_callback(update, context):
             return
         stats = await get_stats()
         await query.edit_message_text(
-            f"📊 <b>Статистика бота</b>\n\n"
-            f"👥 Пользователей: {stats['total_users']}\n"
-            f"📸 Скриншотов: {stats['total_screenshots']}\n"
-            f"🗓 Активных недель: {stats['active_weeks']}\n"
-            f"🏆 Победителей: {stats['total_winners']}\n"
-            f"📋 Участников на этой неделе: {stats['this_week_participants']}\n"
-            f"📅 Текущая неделя: {stats['current_week']}",
+            f"\U0001f4ca <b>Статистика бота</b>\n\n"
+            f"\U0001f465 Пользователей: {stats['total_users']}\n"
+            f"\U0001f4f8 Скриншотов: {stats['total_screenshots']}\n"
+            f"\U0001f4c5 Активных недель: {stats['active_weeks']}\n"
+            f"\U0001f3c6 Победителей: {stats['total_winners']}\n"
+            f"\U0001f4cb Участников на этой неделе: {stats['this_week_participants']}\n"
+            f"\U0001f4c5 Текущая неделя: {week_key_to_display(stats['current_week'])}",
             parse_mode="HTML")
 
     elif data == "admin_leaderboard":
@@ -203,12 +260,31 @@ async def button_callback(update, context):
         week_key = get_current_week_key()
         lb = await get_week_leaderboard(week_key)
         if not lb:
-            await query.edit_message_text(f"Нет данных за {week_key}.", parse_mode="HTML")
+            await query.edit_message_text(f"Нет данных за {week_key_to_display(week_key)}.", parse_mode="HTML")
             return
-        lines = [f"🏆 <b>Лидеры недели {week_key}</b>\n"]
+        lines = [f"\U0001f3c6 <b>Лидеры недели {week_key_to_display(week_key)}</b>\n"]
         for i, p in enumerate(lb, 1):
             lines.append(f"{i}. {p['email']} - {p['screenshot_count']} скр.")
         await query.edit_message_text("\n".join(lines), parse_mode="HTML")
+
+    elif data == "admin_screenshots":
+        if not is_admin(user.id):
+            return
+        week_key = get_current_week_key()
+        shots = await get_screenshots_by_week(week_key)
+        if not shots:
+            await query.edit_message_text(
+                f"\U0001f4f8 Нет скриншотов за {week_key_to_display(week_key)}.", parse_mode="HTML")
+            return
+        lines = [f"\U0001f4f8 <b>Скриншоты за {week_key_to_display(week_key)}</b> ({len(shots)} шт.):\n"]
+        for i, s in enumerate(shots, 1):
+            dt = s["submitted_at"][:16].replace("T", " ")
+            username = f"@{s['username']}" if s.get("username") else ""
+            lines.append(f"{i}. {s['email']} {username} - {dt}")
+        text = "\n".join(lines)
+        if len(text) > 4096:
+            text = text[:4000] + "\n..."
+        await query.edit_message_text(text, parse_mode="HTML")
 
     elif data == "admin_participants":
         if not is_admin(user.id):
@@ -217,12 +293,12 @@ async def button_callback(update, context):
         if not parts:
             await query.edit_message_text("Нет участников.", parse_mode="HTML")
             return
-        lines = ["👥 <b>Все участники</b>\n"]
+        lines = ["\U0001f465 <b>Все участники</b>\n"]
         for p in parts:
             wins = p.get("win_count", 0) or 0
-            lines.append(f"• {p['email']} - {p['total_screenshots']} скр., {p['weeks_active']} нед., {wins} побед")
+            lines.append(f"\u2022 {p['email']} - {p['total_screenshots']} скр., {p['weeks_active']} нед., {wins} побед")
         text = "\n".join(lines)
-        if len(text) > 4000:
+        if len(text) > 4096:
             text = text[:4000] + "\n..."
         await query.edit_message_text(text, parse_mode="HTML")
 
@@ -230,7 +306,11 @@ async def button_callback(update, context):
         if not is_admin(user.id):
             return
         await query.edit_message_text(
-            "📤 Используйте команду:\n<code>/export</code> - текущая неделя\n<code>/export 2026-W26</code> - конкретная неделя",
+            "\U0001f4e4 Используйте команды:\n"
+            "<code>/export</code> - текущая неделя (CSV + фото)\n"
+            "<code>/export 2026-W27</code> - конкретная неделя\n"
+            "<code>/screenshots</code> - список скриншотов (текст)\n"
+            "<code>/screenshots 2026-W27</code> - за неделю",
             parse_mode="HTML")
 
     elif data == "admin_winners":
@@ -240,9 +320,9 @@ async def button_callback(update, context):
         if not winners:
             await query.edit_message_text("Победителей пока нет.", parse_mode="HTML")
             return
-        lines = ["📜 <b>История победителей</b>\n"]
+        lines = ["\U0001f4dc <b>История победителей</b>\n"]
         for w in winners:
-            lines.append(f"📅 {w['week_key']}: {w['email']}")
+            lines.append(f"\U0001f4c5 {week_key_to_display(w['week_key'])}: {w['email']}")
         await query.edit_message_text("\n".join(lines), parse_mode="HTML")
 
     elif data == "admin_raffle":
@@ -251,13 +331,13 @@ async def button_callback(update, context):
         week_key = get_previous_week_key()
         if await is_winner_already_chosen(week_key):
             await query.edit_message_text(
-                f"Победитель за {week_key} уже выбран!",
+                f"Победитель за {week_key_to_display(week_key)} уже выбран!",
                 parse_mode="HTML")
             return
         participants = await get_week_participants(week_key)
         if not participants:
             await query.edit_message_text(
-                f"Нет участников за {week_key}.",
+                f"Нет участников за {week_key_to_display(week_key)}.",
                 parse_mode="HTML")
             return
         weights = [p["screenshot_count"] for p in participants]
@@ -269,13 +349,13 @@ async def button_callback(update, context):
             "count": winner["screenshot_count"],
         }
         keyboard = [
-            [InlineKeyboardButton("✅ Подтвердить", callback_data="confirm_raffle")],
-            [InlineKeyboardButton("❌ Отмена", callback_data="cancel_raffle")],
+            [InlineKeyboardButton("\u2705 Подтвердить", callback_data="confirm_raffle")],
+            [InlineKeyboardButton("\u274c Отмена", callback_data="cancel_raffle")],
         ]
         await query.edit_message_text(
-            f"🎰 <b>Предварительный результат розыгрыша {week_key}</b>\n\n"
+            f"\U0001f3b0 <b>Предварительный результат розыгрыша {week_key_to_display(week_key)}</b>\n\n"
             f"Участников: {len(participants)}\n\n"
-            f"🏆 Победитель: <b>{winner['email']}</b>\n"
+            f"\U0001f3c6 Победитель: <b>{winner['email']}</b>\n"
             f"Скриншотов: {winner['screenshot_count']}\n\n"
             "Подтвердить?",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -292,12 +372,12 @@ async def button_callback(update, context):
         try:
             await context.bot.send_message(
                 chat_id=pw["user_id"],
-                text=f"🎉 Поздравляем! Вы выиграли розыгрыш за неделю {pw['week_key']}!\n"
-                     f"Ваше количество скриншотов: {pw['count']} 🍾")
+                text=f"\U0001f389 Поздравляем! Вы выиграли розыгрыш за неделю {week_key_to_display(pw['week_key'])}!\n"
+                     f"Ваше количество скриншотов: {pw['count']} \U0001f37b")
         except Exception as e:
             logger.error(f"Failed to notify winner: {e}")
         await query.edit_message_text(
-            f"✅ Победитель <b>{pw['email']}</b> за неделю {pw['week_key']} утверждён!\n"
+            f"\u2705 Победитель <b>{pw['email']}</b> за неделю {week_key_to_display(pw['week_key'])} утверждён!\n"
             f"Уведомление отправлено.",
             parse_mode="HTML")
         context.user_data.pop("pending_winner", None)
@@ -310,17 +390,16 @@ async def button_callback(update, context):
 
 
 async def handle_screenshot(update, context, user_id, email):
-    """Process an uploaded screenshot."""
     photos = update.message.photo
     if not photos:
-        await update.message.reply_text("❌ Это не фото. Отправьте скриншот (JPG/PNG).")
+        await update.message.reply_text("\u274c Это не фото. Отправьте скриншот (JPG/PNG).")
         return
 
     file = photos[-1]
     file_unique_id = file.file_unique_id
 
     if await is_duplicate_screenshot(user_id, file_unique_id):
-        await update.message.reply_text("⚠️ Этот скриншот уже был загружен!")
+        await update.message.reply_text("\u26a0\ufe0f Этот скриншот уже был загружен!")
         return
 
     try:
@@ -330,7 +409,7 @@ async def handle_screenshot(update, context, user_id, email):
         await file_obj.download_to_drive(file_path)
     except Exception as e:
         logger.error(f"Download error: {e}")
-        await update.message.reply_text("❌ Ошибка сохранения. Попробуйте снова.")
+        await update.message.reply_text("\u274c Ошибка сохранения. Попробуйте снова.")
         return
 
     week_key = get_current_week_key()
@@ -338,12 +417,12 @@ async def handle_screenshot(update, context, user_id, email):
         count = await get_week_screenshots_count(week_key)
         wine = get_current_wine()
         await update.message.reply_text(
-            f"✅ Скриншот принят! ({wine})\n"
-            f"📸 Всего за неделю: {count}\n"
+            f"\u2705 Скриншот принят! ({wine})\n"
+            f"\U0001f4f8 Всего за неделю: {count}\n"
             f"Отправить ещё? Или нажмите /start для меню.",
             parse_mode="HTML")
     else:
-        await update.message.reply_text("⚠️ Ошибка дублирования.")
+        await update.message.reply_text("\u26a0\ufe0f Ошибка дублирования.")
 
 
 async def handle_message(update, context):
@@ -353,7 +432,7 @@ async def handle_message(update, context):
         email = update.message.text.strip()
         if not email.endswith("@luding.ru"):
             await update.message.reply_text(
-                "❌ Допускаются только рабочие email @luding.ru!\nПопробуйте снова:")
+                "\u274c Допускаются только рабочие email домена luding.ru!\nПопробуйте снова:")
             return
         success, msg = await register_user(
             update.effective_user.id, update.effective_user.username, email)
@@ -365,7 +444,7 @@ async def handle_message(update, context):
         user_id = update.effective_user.id
         email = await get_user_email(user_id)
         if not email:
-            await update.message.reply_text("❌ Email не найден. Зарегистрируйтесь заново.")
+            await update.message.reply_text("\u274c Email не найден. Зарегистрируйтесь заново.")
             context.user_data["state"] = None
             return
         await handle_screenshot(update, context, user_id, email)
@@ -376,7 +455,7 @@ async def handle_message(update, context):
             user_id = update.effective_user.id
             email = await get_user_email(user_id)
             if not email:
-                await update.message.reply_text("❌ Email не найден.")
+                await update.message.reply_text("\u274c Email не найден.")
                 context.user_data["state"] = None
                 return
             await handle_screenshot(update, context, user_id, email)
@@ -384,31 +463,7 @@ async def handle_message(update, context):
             await update.message.reply_text("Отправьте фото или нажмите /start для меню.")
 
 
-async def export_command(update, context):
-    if not is_admin(update.effective_user.id):
-        return
-    week_key = context.args[0] if context.args else get_current_week_key()
-    screenshots = await get_screenshots_by_week(week_key)
-    if not screenshots:
-        await update.message.reply_text(f"Нет данных за {week_key}.")
-        return
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["email", "user_id", "username", "submitted_at", "week_key", "file_id"])
-    for s in screenshots:
-        writer.writerow([
-            s["email"], s["user_id"], s.get("username", ""),
-            s["submitted_at"], s["week_key"], s["file_id"]])
-
-    output.seek(0)
-    await update.message.reply_document(
-        document=InputFile(output, filename=f"vivino_export_{week_key}.csv"),
-        caption=f"📊 Экспорт за {week_key}: {len(screenshots)} записей")
-
-
 async def reminder_job(context):
-    """Friday 18:00 MSK - remind users with 0 screenshots this week."""
     user_ids = await get_registered_user_ids()
     week_key = get_current_week_key()
     wine = get_current_wine() or "текущее вино"
@@ -419,11 +474,11 @@ async def reminder_job(context):
             try:
                 await context.bot.send_message(
                     chat_id=uid,
-                    text=f"⏰ Напоминание!\n\n"
-                         f"Эта неделя ещё без вашего скриншота! 🍷\n"
+                    text=f"\u23f0 Напоминание!\n\n"
+                         f"Эта неделя ещё без вашего скриншота! \U0001f377\n"
                          f"Вино недели: {wine}\n"
                          f"Отправьте скриншот оценки из Vivino, чтобы участвовать в розыгрыше.\n"
-                         f"Удачи! 🎲")
+                         f"Удачи! \U0001f3b2")
                 notified += 1
             except Exception as e:
                 logger.error(f"Reminder failed for {uid}: {e}")
@@ -454,19 +509,19 @@ async def post_init(application):
         name="weekly_reminder",
     )
     logger.info(
-        f"[INIT] Reminder job scheduled: day={config.REMINDER_DAY_OF_WEEK} "
-        f"time={config.REMINDER_HOUR}:{config.REMINDER_MINUTE:02d} MSK")
+        f"[INIT] Reminder scheduled: Friday {config.REMINDER_HOUR}:{config.REMINDER_MINUTE:02d} MSK")
 
 
 def main():
     if not config.BOT_TOKEN:
-        print("[ERROR] BOT_TOKEN environment variable is not set!")
+        print("[ERROR] BOT_TOKEN not set!")
         return
 
     app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("my", my_stats_command))
+    app.add_handler(CommandHandler("screenshots", screenshots_command))
     app.add_handler(CommandHandler("export", export_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
