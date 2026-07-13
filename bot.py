@@ -35,6 +35,7 @@ from database import (
     get_stats, get_week_leaderboard, get_all_participants,
     get_all_screenshots, get_screenshots_by_week, get_screenshots_by_email,
     get_registered_user_ids, get_all_emails, week_key_to_display,
+    get_user_info_by_email, delete_user_by_email,
 )
 
 logging.basicConfig(
@@ -47,6 +48,7 @@ WAITING_EMAIL = 1
 WAITING_SCREENSHOT = 2
 ASK_ANOTHER = 3
 WAITING_USER_EMAIL = 4
+WAITING_DELETE_USER = 5
 
 
 def is_admin(user_id):
@@ -89,16 +91,13 @@ async def start_command(update, context):
     stats = await get_user_stats(user.id)
     if stats and stats["this_week"] > 0:
         keyboard = [
-            [InlineKeyboardButton("\U0001f4f8 Загрузить скриншот", callback_data="upload_screenshot")],
+            [InlineKeyboardButton("\U0001f4f8 Загрузить ещё", callback_data="upload_screenshot")],
         ]
         if is_admin(user.id):
             keyboard.append([InlineKeyboardButton("\u2699\ufe0f Админ-панель", callback_data="admin_panel")])
-        text = f"{wine_text}\U0001f389 Спасибо за участие! Загрузить ещё скриншот?"
-        if keyboard:
-            await update.message.reply_text(
-                text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        else:
-            await update.message.reply_text(text, parse_mode="HTML")
+        text = f"{wine_text}\U0001f4f8 Ваших скриншотов за неделю: {stats['this_week']}"
+        await update.message.reply_text(
+            text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
         return
 
     keyboard = [
@@ -251,6 +250,7 @@ async def button_callback(update, context):
             [InlineKeyboardButton("\U0001f4e4 Экспорт CSV + фото", callback_data="admin_export")],
             [InlineKeyboardButton("\U0001f4f7 Скриншоты пользователя", callback_data="admin_user_screenshots")],
             [InlineKeyboardButton("\U0001f4dc История победителей", callback_data="admin_winners")],
+            [InlineKeyboardButton("\U0001f5d1 Удалить пользователя", callback_data="admin_delete_user")],
             [InlineKeyboardButton("\U0001f519 Назад", callback_data="back_to_main")],
         ]
         await query.edit_message_text(
@@ -445,6 +445,31 @@ async def button_callback(update, context):
         context.user_data.pop("raffle_participants", None)
         context.user_data.pop("raffle_week_key", None)
 
+    elif data == "admin_delete_user":
+        if not is_admin(user.id):
+            return
+        await query.edit_message_text(
+            "\U0001f5d1 <b>Удаление пользователя</b>\n\n"
+            "Введите email участника для удаления.\n"
+            "Будут удалены: пользователь, все его скриншоты и победы.",
+            parse_mode="HTML")
+        context.user_data["state"] = WAITING_DELETE_USER
+
+    elif data and data.startswith("confirm_delete:"):
+        if not is_admin(user.id):
+            return
+        email = data.split(":", 1)[1]
+        success, msg = await delete_user_by_email(email)
+        icon = "\u2705" if success else "\u274c"
+        await query.edit_message_text(f"{icon} {msg}", parse_mode="HTML")
+        context.user_data.pop("pending_delete_email", None)
+
+    elif data == "cancel_delete":
+        if not is_admin(user.id):
+            return
+        context.user_data.pop("pending_delete_email", None)
+        await query.edit_message_text("Удаление отменено.", parse_mode="HTML")
+
     elif data == "admin_user_screenshots":
         if not is_admin(user.id):
             return
@@ -518,10 +543,8 @@ async def handle_screenshot(update, context, user_id, email):
         await update.message.reply_text(
             f"\u2705 Скриншот принят! ({wine})\n"
             f"\U0001f4f8 Всего за неделю: {count}\n"
-            f"Отправить ещё? Или нажмите /start для меню.",
+            f"\U0001f389 Спасибо! Результаты розыгрыша — в понедельник \U0001f340",
             parse_mode="HTML")
-        await update.message.reply_text(
-            "\U0001f389 Спасибо за участие! Результаты розыгрыша огласим в понедельник. Удачи! \U0001f340")
     else:
         await update.message.reply_text("\u26a0\ufe0f Ошибка дублирования.")
 
@@ -589,6 +612,30 @@ async def handle_message(update, context):
             except Exception as e:
                 logger.error(f"[USER_SHOTS] Failed to send photo batch: {e}")
                 await update.message.reply_text("\u26a0\ufe0f Не удалось отправить часть фото")
+
+    elif state == WAITING_DELETE_USER:
+        email = update.message.text.strip()
+        info = await get_user_info_by_email(email)
+        if not info:
+            await update.message.reply_text(
+                f"\u274c Пользователь {email} не найден.", parse_mode="HTML")
+            context.user_data["state"] = None
+            return
+        context.user_data["pending_delete_email"] = email
+        keyboard = [
+            [InlineKeyboardButton("\u26a0\ufe0f Да, удалить", callback_data=f"confirm_delete:{email}")],
+            [InlineKeyboardButton("\u274c Отмена", callback_data="cancel_delete")],
+        ]
+        username = f"@{info['username']}" if info['username'] else "нет"
+        await update.message.reply_text(
+            f"\U0001f5d1 <b>Удалить пользователя?</b>\n\n"
+            f"\U0001f4e7 Email: {info['email']}\n"
+            f"\U0001f464 Username: {username}\n"
+            f"\U0001f4f8 Скриншотов: {info['screenshots_count']}\n"
+            f"\U0001f3c6 Побед: {info['wins_count']}\n\n"
+            f"<i>Все данные будут удалены безвозвратно.</i>",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML")
 
     elif state == ASK_ANOTHER:
         if update.message.photo:

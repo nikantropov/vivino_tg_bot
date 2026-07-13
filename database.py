@@ -352,3 +352,49 @@ async def get_screenshots_by_week(week_key):
             ORDER BY s.submitted_at DESC
         """, week_key)
         return [dict(r) for r in rows]
+
+
+async def get_user_info_by_email(email):
+    """Get user info and counts for deletion confirmation."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT user_id, username, email, registered_at FROM users WHERE email = $1", email)
+        if not row:
+            return None
+        shots = (await conn.fetchval(
+            "SELECT COUNT(*) FROM screenshots WHERE email = $1", email)) or 0
+        wins = (await conn.fetchval(
+            "SELECT COUNT(*) FROM winners WHERE email = $1", email)) or 0
+        return {
+            "user_id": row["user_id"],
+            "username": row["username"],
+            "email": row["email"],
+            "registered_at": row["registered_at"],
+            "screenshots_count": shots,
+            "wins_count": wins,
+        }
+
+
+async def delete_user_by_email(email):
+    """Delete user and all related data. Returns (success, message)."""
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            info = await conn.fetchrow(
+                "SELECT user_id, email FROM users WHERE email = $1", email)
+            if not info:
+                return False, f"Пользователь {email} не найден."
+
+            shots = await conn.fetchval(
+                "DELETE FROM screenshots WHERE email = $1 RETURNING id", email)
+            wins = await conn.fetchval(
+                "DELETE FROM winners WHERE email = $1 RETURNING id", email)
+            await conn.execute("DELETE FROM users WHERE email = $1", email)
+
+            return True, (
+                f"Пользователь {email} удалён.\n"
+                f"Удалено скриншотов: {shots or 0}\n"
+                f"Удалено побед: {wins or 0}")
+    except Exception as e:
+        return False, f"Ошибка при удалении: {e}"
