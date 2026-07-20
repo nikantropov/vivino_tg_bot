@@ -12,7 +12,13 @@ _pool = None
 async def get_pool():
     global _pool
     if _pool is None or _pool._closed:
-        _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+        _pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=5,
+            command_timeout=30,
+            statement_cache_size=0,
+        )
     return _pool
 
 
