@@ -27,11 +27,11 @@ REMINDER_MINUTE = 0
 
 # Wine of the Week schedule
 WINE_SCHEDULE = {
-    "20.07-26.07": "Urban Sun",
-    "27.07-02.08": "High Roof",
-    "03.08-09.08": "Adagum",
-    "10.08-16.08": "Idolo",
-    "17.08-23.08": "Авторское",
-    "24.08-30.08": "Adagum Reserve",
-    "31.08-06.09": "Adagum Estate",
+    "27.07-02.08": "Urban Sun",
+    "03.08-09.08": "High Roof",
+    "10.08-16.08": "Adagum",
+    "17.08-23.08": "Idolo",
+    "24.08-30.08": "Авторское",
+    "31.08-06.09": "Adagum Reserve",
+    "07.09-13.09": "Adagum Estate",
 }
